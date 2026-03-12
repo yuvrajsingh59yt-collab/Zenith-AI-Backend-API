@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zenith AI</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+body {
+  margin: 0;
+  font-family: 'Orbitron', sans-serif;
+  background: radial-gradient(circle at center, #0f0f1a 0%, #1a1a2e 100%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.arc-reactor {
+  width: 150px;
+  height: 150px;
+  margin: 20px;
+  border-radius: 50%;
+  background: conic-gradient(#00e5ff 0%, #004466 90%, #00e5ff 100%);
+  animation: spin 4s linear infinite;
+  box-shadow: 0 0 20px #00e5ff, 0 0 50px #00e5ff inset;
+}
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+h1 {
+  margin: 10px 0;
+  font-weight: 700;
+  color: #00e5ff;
+  text-shadow: 0 0 10px #00e5ff;
+}
+
+#chat {
+  width: 90%;
+  max-width: 600px;
+  height: 50%;
+  background: rgba(30,30,50,0.85);
+  border-radius: 15px;
+  padding: 10px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  font-size: 16px;
+}
+
+.message {
+  margin: 5px 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  max-width: 80%;
+  word-wrap: break-word;
+}
+
+.user {
+  align-self: flex-end;
+  background-color: #00e5ff;
+  color: #000;
+}
+
+.bot {
+  align-self: flex-start;
+  background-color: #444466;
+}
+
+#inputArea {
+  display: flex;
+  width: 90%;
+  max-width: 600px;
+  margin-bottom: 20px;
+}
+
+#userInput {
+  flex: 1;
+  padding: 10px;
+  border-radius: 5px;
+  border: none;
+  outline: none;
+  font-size: 16px;
+}
+
+#sendBtn {
+  padding: 10px 20px;
+  margin-left: 10px;
+  border-radius: 5px;
+  border: none;
+  background-color: #00e5ff;
+  color: #000;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* Typing animation */
+.typing::after {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 5px;
+  background: #00e5ff;
+  border-radius: 50%;
+  animation: blink 1s infinite;
+  vertical-align: middle;
+}
+@keyframes blink { 0%, 50%, 100% { opacity: 0; } 25%, 75% { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="arc-reactor"></div>
+<h1>Zenith AI</h1>
+<div id="chat"></div>
+<div id="inputArea">
+  <input type="text" id="userInput" placeholder="Type your message..." />
+  <button id="sendBtn">Send</button>
+</div>
+
+<script>
+const chat = document.getElementById("chat");
+const userInput = document.getElementById("userInput");
+const sendBtn = document.getElementById("sendBtn");
+
+let personalized = false;
+const userProfile = {};
+
+const personalizationQuestions = [
+  { key: "name", question: "Hello! What's your name?" },
+  { key: "interest", question: "What are your favorite topics (e.g., coding, science, games)?" },
+  { key: "tone", question: "Do you prefer responses to be professional, casual, or fun?" }
+];
+
+function askNextQuestion() {
+  if (personalizationQuestions.length === 0) return;
+  const next = personalizationQuestions.shift();
+  appendMessage("bot", next.question);
+  userProfile.currentKey = next.key;
+}
+askNextQuestion();
+
+async function sendMessage() {
+  const message = userInput.value.trim();
+  if (!message) return;
+
+  appendMessage("user", message);
+  userInput.value = "";
+
+  if (userProfile.currentKey) {
+    userProfile[userProfile.currentKey] = message;
+    delete userProfile.currentKey;
+    askNextQuestion();
+    return;
+  }
+
+  const botDiv = appendMessage("bot", "Thinking...");
+  botDiv.classList.add("typing");
+
+  try {
+    const prompt = `You are Zenith AI. Respond in a ${userProfile.tone || "professional"} tone. 
+User's name: ${userProfile.name || "User"}.
+User likes: ${userProfile.interest || "general topics"}.
+User said: ${message}`;
+
+    const response = await fetch("/api/openai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+
+    const data = await response.json();
+    const botMessage = data.choices[0].message.content;
+    botDiv.textContent = "";
+    typeText(botDiv, botMessage);
+    speak(botMessage);
+  } catch (err) {
+    botDiv.textContent = "Error: Unable to get response.";
+    console.error(err);
+  }
+}
+
+function typeText(element, text) {
+  let i = 0;
+  const interval = setInterval(() => {
+    element.textContent += text.charAt(i);
+    i++;
+    if (i >= text.length) clearInterval(interval);
+  }, 25);
+}
+
+function appendMessage(sender, text) {
+  const msgDiv = document.createElement("div");
+  msgDiv.classList.add("message", sender);
+  msgDiv.textContent = text;
+  chat.appendChild(msgDiv);
+  chat.scrollTop = chat.scrollHeight;
+  return msgDiv;
+}
+
+function speak(text) {
+  const synth = window.speechSynthesis;
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = "en-US";
+  utter.pitch = 0.9;
+  utter.rate = 1;
+  utter.volume = 1;
+  utter.voice = synth.getVoices().find(v => v.name.includes("Male") || v.name.includes("Alex")) || synth.getVoices()[0];
+  synth.speak(utter);
+}
+
+sendBtn.addEventListener("click", sendMessage);
+userInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendMessage();
+});
+</script>
+</body>
+</html>
